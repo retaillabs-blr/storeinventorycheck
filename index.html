@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store Inventory Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; text-align: center; }
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; }
+        button { padding: 15px 30px; font-size: 18px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button.stop { background: #dc3545; }
+        button.download { background: #28a745; }
+        #result-list { list-style: none; padding: 0; margin-top: 20px; text-align: left; max-height: 300px; overflow-y: scroll; border: 1px solid #ccc; }
+        #result-list li { padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+    <h2>Inventory Scanner</h2>
+    <div id="reader"></div>
+    <div id="controls">
+        <button onclick="startScanning()">Start Camera</button>
+        <button class="stop" onclick="stopScanning()">Stop Camera</button>
+    </div>
+    <br>
+    <button class="download" onclick="downloadCSV()">Download CSV</button>
+    <button onclick="clearList()" style="background:#6c757d;">Clear List</button>
+
+    <h3>Scanned Items (<span id="count">0</span>)</h3>
+    <ul id="result-list"></ul>
+
+    <script>
+        let html5QrcodeScanner;
+        let scannedData = JSON.parse(localStorage.getItem('inventoryScans')) || [];
+
+        function renderList() {
+            const list = document.getElementById('result-list');
+            document.getElementById('count').innerText = scannedData.length;
+            list.innerHTML = '';
+            scannedData.slice().reverse().forEach(item => {
+                const li = document.createElement('li');
+                li.innerText = `${item.code}  (${item.time})`;
+                list.appendChild(li);
+            });
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // Prevent duplicate rapid scans if needed, current logic allows all
+            const timestamp = new Date().toLocaleString();
+            scannedData.push({ code: decodedText, time: timestamp });
+            localStorage.setItem('inventoryScans', JSON.stringify(scannedData));
+            renderList();
+            // Audio feedback
+            new Audio('https://www.soundjay.com/button/beep-07.mp3').play();
+        }
+
+        function startScanning() {
+            html5QrcodeScanner = new Html5Qrcode("reader");
+            html5QrcodeScanner.start(
+                { facingMode: "environment" }, 
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                onScanSuccess
+            ).catch(err => console.log(err));
+        }
+
+        function stopScanning() {
+            if(html5QrcodeScanner) {
+                html5QrcodeScanner.stop().then(() => {
+                    html5QrcodeScanner.clear();
+                }).catch(err => console.log(err));
+            }
+        }
+
+        function downloadCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,Barcode,Timestamp\n";
+            scannedData.forEach(row => {
+                csvContent += `${row.code},${row.time}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "inventory_scan.csv");
+            document.body.appendChild(link);
+            link.click();
+        }
+
+        function clearList() {
+            if(confirm("Clear all scanned data?")) {
+                scannedData = [];
+                localStorage.setItem('inventoryScans', JSON.stringify(scannedData));
+                renderList();
+            }
+        }
+
+        // Init
+        renderList();
+    </script>
+</body>
+</html>
